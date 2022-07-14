@@ -45,7 +45,7 @@ class Stream:
         data = self.__load_raw_data(cycle_num)
 
         # Features, Latency
-        return 	[c['features'] for c in data], [c[target_name] for c in data]
+        return 	[c['features'] for c in data], [c[target_name] for c in data], [c['verification_times'] for c in data]
 
         # Features, Packet loss, Latency, Energy consumption, Verification times
                 # [c['packetloss'] for c in data], \
@@ -59,6 +59,16 @@ class Stream:
         
         target_vals = {}
         for i in range(len(self.__target_types)):
-            features, target = self.__load_raw_data_split(cycle_num, self.__target_names[i])
+            features, target, verfs_time = self.__load_raw_data_split(cycle_num, self.__target_names[i])
             target_vals[self.__target_types[i]] = self.__flatten(target)
-        return self.__flatten(features), target_vals
+        return self.__flatten(features), target_vals, verfs_time
+    
+
+def fetch_stream(stream_len, target_types = [TargetType.LATENCY, TargetType.PACKETLOSS, TargetType.ENERGY_CONSUMPTION],
+                                            target_names = ["latency", "packetloss", "energyconsumption"], data_order = None,
+                                            stream_addr = "./data/FirstTry"):
+    # if(with_drift):
+    return Stream(stream_len, target_types= target_types,\
+                target_names= target_names, \
+                # stream_addr = "./data/sudden_locals_20_distributed")
+                stream_addr = stream_addr, data_order = data_order)
