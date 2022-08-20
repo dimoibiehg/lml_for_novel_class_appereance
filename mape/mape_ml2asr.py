@@ -12,29 +12,34 @@ from sklearn.mixture import GaussianMixture
 import sys
 from scipy import stats
 import statistics
-from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import SGDRegressor
+from tqdm import tqdm
 
 class MAPE_ML2ASR():
-    def __init__(self, stream:Stream, initial_training_cycle_num = 40):
+    def __init__(self, stream:Stream, 
+                 target_scaler, 
+                 feature_scaler, 
+                 classifiers, 
+                 selected_features_indices,
+                 initial_training_cycle_num = 40):
         self.stream:Stream = stream
         self.initial_training_cycle_num = initial_training_cycle_num
         self.maximum_class_num = 5
-        self.classifiers = [] # order is matter for goal satisfaction
+        self.classifiers = classifiers # order is matter for goal satisfaction
         self.features = []
         self.targets_pl = []
         self.targets_la = []
         self.targets_ec = []
         self.compnent_num = 1
-        self.target_scaler = []
-        self.feature_scaler = []
+        self.target_scaler = target_scaler
+        self.feature_scaler = feature_scaler
         self.proba_not_a_member_threshold = 0.001 # 3-sigma 
         self.out_of_class_limit_num = 3
         self.best_selected_targets = [] #(pl, la, ec)
-        self.pl_learning_model = []
-        self.ec_learning_model = []
-        self.selected_features_indices = []
+        self.pl_learning_model = SGDRegressor()
+        self.ec_learning_model = SGDRegressor()
+        self.selected_features_indices = selected_features_indices
         self.verified_count = []
     def human_ordering(self, class_type):
         if(class_type == 1):
@@ -47,11 +52,9 @@ class MAPE_ML2ASR():
         # here, always total verfication times is much less than 10 minutes (around 3 minutes)
         # otherwise the verification time of the selected features should be considered 
         targets_pl = targets[TargetType.PACKETLOSS]
-        targets_la = targets[TargetType.LATENCY]
         targets_ec = targets[TargetType.ENERGY_CONSUMPTION]
         
         self.targets_pl.extend(targets_pl)
-        self.targets_la.extend(targets_la)
         self.targets_ec.extend(targets_ec)
         
         #fail-safe option
@@ -59,32 +62,13 @@ class MAPE_ML2ASR():
         
         probas = []
         detected_classes = []
-        is_training = True
-        # select an appropriate adaptation option based on classification goal
-        if(self.stream.current_cyle < self.initial_training_cycle_num):
-            pass
-        elif(self.stream.current_cyle == self.initial_training_cycle_num):
-            self.target_scaler = preprocessing.MinMaxScaler()
-            total_collected_target_data = list(zip(self.targets_pl, self.targets_ec))
-            scaled_target_data = self.target_scaler.fit_transform(total_collected_target_data)
-            self.compnent_num, classifier = find_component_num(scaled_target_data)
-            for i in range(self.compnent_num):
-                self.classifiers.append([classifier.means_[i], classifier.covariances_[i]])
-            self.classifiers_order = self.human_ordering(1)
         
-            # feature selection
-            self.feature_scaler = preprocessing.StandardScaler()
-            scaled_feature_data = self.feature_scaler.fit_transform(self.features)
-            reg = ExtraTreesRegressor(random_state=50)
-            reg.fit(scaled_feature_data, total_collected_target_data)
-            self.selected_features_indices = [ind for ind, x in enumerate(reg.feature_importances_) if x > 0.0]
-            
-            self.pl_learning_model = SGDRegressor()
-            self.ec_learning_model = SGDRegressor()
-            
-            
-            self.pl_learning_model.fit(scaled_feature_data[:,self.selected_features_indices], self.targets_pl)
-            self.ec_learning_model.fit(scaled_feature_data[:,self.selected_features_indices], self.targets_ec)
+        # select an appropriate adaptation option based on classification goal
+        if(self.stream.current_cyle <= self.initial_training_cycle_num):
+            is_training = True
+            scaled_feature_data = self.feature_scaler.fit_transform(features)
+            self.pl_learning_model.partial_fit(scaled_feature_data[:,self.selected_features_indices], targets_pl)
+            self.ec_learning_model.partial_fit(scaled_feature_data[:,self.selected_features_indices], targets_ec)
             
             # print("fitted")
         else:
@@ -105,7 +89,7 @@ class MAPE_ML2ASR():
                 probas.append(max_prob)
                 detected_classes.append(max_classifier_idx)
                 
-        self.plan(probas, detected_classes, targets_pl, targets_la, targets_ec, is_training=is_training)
+        self.plan(probas, detected_classes, features, targets_pl, targets_ec, is_training=is_training)
                 # if(max_classifier_idx > -1):
                     # detected_classes[max_classifier_idx].append(i)
                     # if(self.classifiers_order[max_classifier_idx] == 1):
@@ -118,22 +102,54 @@ class MAPE_ML2ASR():
                         # print(self.stream.current_cyle)
                         # print(proba)
     
-    def plan(self, probas, detected_classes, targets_pl, targets_la, targets_ec, is_training = False):
+    def plan(self, probas, detected_classes, features, targets_pl, targets_ec, is_training = False):
         best_option_idx = -1
+        num_verification_counter = 0
         if(is_training):
             best_option_idx = np.argmin(targets_ec)
-            self.best_selected_targets.append([targets_pl[best_option_idx], targets_la[best_option_idx], targets_ec[best_option_idx]])
+            self.best_selected_targets.append([targets_pl[best_option_idx], targets_ec[best_option_idx]])
+            num_verification_counter = len(targets_ec)
         else:
-            sorted_probas_arg = np.argsort(probas)
-            for i in range(1, len(sorted_probas_arg)+1):
-                ind = sorted_probas_arg[-i]  
-                max_classifier_idx, max_prob = \
-                    self.classification(targets_pl[ind], targets_ec[ind])
-                if(max_prob > self.proba_not_a_member_threshold):
-                    best_option_idx = ind
+            probas_classes = []
+            ind_classes = []
+            for i in range(len(self.classifiers)):
+                probas_classes.append([])
+                ind_classes.append([])
+                for ind, x in enumerate(detected_classes):
+                    if x == i:
+                        probas_classes[-1].append(probas[ind])
+                        ind_classes[-1].append(ind)
+            sorted_probas_arg_per_class = [np.argsort(x) for x in probas_classes]
+            
+            for j in range(len(self.classifiers)):
+                sorted_probas_arg = sorted_probas_arg_per_class[j]
+                out_of_class_limit_counter = 0 
+                for i in range(1, len(sorted_probas_arg)+1):
+                    ind = ind_classes[j][sorted_probas_arg[-i]]
+                    max_classifier_idx, max_prob = \
+                        self.classification(targets_pl[ind], targets_ec[ind])
+                    
+                    if(out_of_class_limit_counter > self.out_of_class_limit_num):
+                        best_option_idx = ind
+                        break
+                    else:
+                        if(max_prob > self.proba_not_a_member_threshold):
+                            best_option_idx = ind
+                            break
+                        else:
+                            out_of_class_limit_counter += 1
+                    num_verification_counter += 1
+                    self.pl_learning_model.partial_fit([features[ind]], [targets_pl[ind]])
+                    self.ec_learning_model.partial_fit([features[ind]], [targets_ec[ind]])
+                if(best_option_idx > -1):
                     break
-            self.verified_count.append(i)
-            self.best_selected_targets.append([targets_pl[best_option_idx], targets_la[best_option_idx], targets_ec[best_option_idx]])
+
+            if(best_option_idx < 0):
+                # fail_safe_option
+                best_option_idx = 0
+                warnings.warn("no option classified as member of exisiting classes!")     
+            self.verified_count.append(num_verification_counter)
+            self.best_selected_targets.append([targets_pl[best_option_idx], targets_ec[best_option_idx]])
             
         self.execute(best_option_idx)
                 
