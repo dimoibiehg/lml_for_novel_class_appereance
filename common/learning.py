@@ -3,6 +3,9 @@ from sklearn import cluster, mixture, metrics
 from sklearn import preprocessing
 import plotly.graph_objects as go
 import numpy as np
+from common.goal import *
+from common.stream import *
+
 class LearnerType(Enum):
     SKLEARN = 1
     KERAS = 2
@@ -32,3 +35,26 @@ def norm_pdf_multivariate(x, mu, sigma):
     inv = np.linalg.inv(sigma)        
     result = math.pow(math.e, -0.5 * (x_mu * inv * x_mu.T))
     return norm_const * result
+
+# offline processings
+def offline_processing_simple_mape():
+    stream = fetch_stream(len(data_order), data_order =  data_order, stream_addr = stream_addr)
+    initial_training_cycle_num = 40
+    targets_pl = []
+    targets_ec = []
+    classifiers = []
+    for i in tqdm(range(initial_training_cycle_num)):
+        features, targets, verf_times = stream.read_current_cycle()
+        # here, always total verfication times is much less than 10 minutes (around 3 minutes)
+        # otherwise the verification time of the selected features should be considered 
+        targets_pl.extend(targets[TargetType.PACKETLOSS])
+        targets_ec.extend(targets[TargetType.ENERGY_CONSUMPTION])
+
+        
+    target_scaler = preprocessing.MinMaxScaler()
+    total_collected_target_data = list(zip(targets_pl, targets_ec))
+    scaled_target_data = target_scaler.fit_transform(total_collected_target_data)
+    compnent_num, classifier = find_component_num(scaled_target_data)
+    for i in range(compnent_num):
+        classifiers.append([classifier.means_[i], classifier.covariances_[i]])
+    return target_scaler, classifiers
