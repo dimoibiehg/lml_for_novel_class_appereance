@@ -105,27 +105,30 @@ class MAPE_ML2ASR():
     def plan(self, probas, detected_classes, features, targets_pl, targets_ec, is_training = False):
         best_option_idx = -1
         num_verification_counter = 0
+        selected_scaled_feature_data = self.feature_scaler.transform(features)[:, self.selected_features_indices]
         if(is_training):
             best_option_idx = np.argmin(targets_ec)
             self.best_selected_targets.append([targets_pl[best_option_idx], targets_ec[best_option_idx]])
             num_verification_counter = len(targets_ec)
         else:
-            probas_classes = []
+            # probas_classes = []
             ind_classes = []
             for i in range(len(self.classifiers)):
-                probas_classes.append([])
+                # probas_classes.append([])
                 ind_classes.append([])
                 for ind, x in enumerate(detected_classes):
                     if x == i:
-                        probas_classes[-1].append(probas[ind])
+                        # probas_classes[-1].append(probas[ind])
                         ind_classes[-1].append(ind)
-            sorted_probas_arg_per_class = [np.argsort(x) for x in probas_classes]
+                        random.shuffle(ind_classes[-1])
+            # sorted_probas_arg_per_class = [np.argsort(x) for x in probas_classes]
             
             for j in range(len(self.classifiers)):
-                sorted_probas_arg = sorted_probas_arg_per_class[j]
+                # sorted_probas_arg = sorted_probas_arg_per_class[j]
+                classes_idxs  = ind_classes[j]
                 out_of_class_limit_counter = 0 
-                for i in range(1, len(sorted_probas_arg)+1):
-                    ind = ind_classes[j][sorted_probas_arg[-i]]
+                for i in range(len(classes_idxs)):
+                    ind = classes_idxs[i]
                     max_classifier_idx, max_prob = \
                         self.classification(targets_pl[ind], targets_ec[ind])
                     
@@ -139,10 +142,31 @@ class MAPE_ML2ASR():
                         else:
                             out_of_class_limit_counter += 1
                     num_verification_counter += 1
-                    self.pl_learning_model.partial_fit([features[ind]], [targets_pl[ind]])
-                    self.ec_learning_model.partial_fit([features[ind]], [targets_ec[ind]])
+                    self.pl_learning_model.partial_fit([selected_scaled_feature_data[ind]], [targets_pl[ind]])
+                    self.ec_learning_model.partial_fit([selected_scaled_feature_data[ind]], [targets_ec[ind]])
                 if(best_option_idx > -1):
                     break
+                
+                # out_of_class_limit_counter = 0 
+                # for i in range(1, len(sorted_probas_arg)+1):
+                #     ind = ind_classes[j][sorted_probas_arg[-i]]
+                #     max_classifier_idx, max_prob = \
+                #         self.classification(targets_pl[ind], targets_ec[ind])
+                    
+                #     if(out_of_class_limit_counter > self.out_of_class_limit_num):
+                #         best_option_idx = ind
+                #         break
+                #     else:
+                #         if(max_prob > self.proba_not_a_member_threshold):
+                #             best_option_idx = ind
+                #             break
+                #         else:
+                #             out_of_class_limit_counter += 1
+                #     num_verification_counter += 1
+                #     self.pl_learning_model.partial_fit([selected_scaled_feature_data[ind]], [targets_pl[ind]])
+                #     self.ec_learning_model.partial_fit([selected_scaled_feature_data[ind]], [targets_ec[ind]])
+                # if(best_option_idx > -1):
+                #     break
 
             if(best_option_idx < 0):
                 # fail_safe_option

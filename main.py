@@ -22,11 +22,11 @@ data_ranges = [[p1[0], p1[-1]], [p2[0], p2[-1]], [p3[0], p3[-1]]]
 
 
 
-# stream = fetch_stream(len(data_order), data_order =  data_order, stream_addr = stream_addr)
-# target_scaler, classifiers = offline_processing_simple_mape(data_order, stream_addr)
-# mape1 = MAPE(stream, classifiers, target_scaler)
-# for i in tqdm(range(348)):
-#     mape1.monitor_and_analyse()
+stream = fetch_stream(len(data_order), data_order =  data_order, stream_addr = stream_addr)
+target_scaler, classifiers = offline_processing_simple_mape(data_order, stream_addr)
+mape1 = MAPE(stream, classifiers, target_scaler)
+for i in tqdm(range(348)):
+    mape1.monitor_and_analyse()
 
 # names = ["ًReference", "ML2ASR"]
 # colors = ["#E15F99", "lightseagreen", "rgb(127, 60, 141)"]#, "rgb(175, 100, 88)"]
