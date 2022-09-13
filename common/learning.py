@@ -7,13 +7,26 @@ from common.goal import *
 from common.stream import *
 from tqdm import tqdm 
 from sklearn.ensemble import ExtraTreesRegressor
-
+from common.learning import *
 class LearnerType(Enum):
     SKLEARN = 1
     KERAS = 2
     
 
-def find_component_num(data, max_comp_num=15):    
+class IDScaler:
+    def fit(self, x):
+        pass
+
+    def partial_fit(self, x):
+        pass
+
+    def fit_transform(self, x):
+        return x
+
+    def transform(self, x):
+        return x
+
+def find_component_num(data, max_comp_num=4, second_derivative_threshold = 0.9):    
     ks = range(1,max_comp_num+1)
     BIC = []
     BGMM : list[mixture.GaussianMixture] = []
@@ -23,8 +36,22 @@ def find_component_num(data, max_comp_num=15):
         BGMM.append(bgmm)
         BIC.append(bgmm.bic(np.array(data)))
 
+    #find valley
     BIC_derivative = [(BIC[i] - BIC[i-1]) for i in range(1, len(BIC))]
-    component_ind=  np.argmax(np.abs(BIC_derivative)) + 1 
+    normalized_BIC_derivative = preprocessing.MinMaxScaler().fit_transform([[x]for x in BIC_derivative])
+    BIC_second_derivative = [(normalized_BIC_derivative[i] - normalized_BIC_derivative[i-1]) 
+                                            for i in range(1, len(normalized_BIC_derivative))]
+    
+    # print(normalized_BIC_derivative)
+    # print(BIC_second_derivative)
+    pass_threshold_ind = 0
+    for ind, x in enumerate(BIC_second_derivative):
+        if(x > second_derivative_threshold):
+            pass_threshold_ind = ind + 1
+            break
+    component_ind = pass_threshold_ind + 1 
+    
+    
     # fig = go.Figure(data=[go.Scatter(y = BIC)])
     # fig.show()
     return component_ind, BGMM[component_ind - 1]
@@ -59,9 +86,12 @@ def offline_processing_simple_mape(data_order, stream_addr, initial_training_cyc
         data_gathering_for_offline_processing(data_order, stream_addr, initial_training_cycle_num=initial_training_cycle_num)
 
     classifiers = []
-    target_scaler = preprocessing.MinMaxScaler()
+    # target_scaler = preprocessing.MinMaxScaler()
+    target_scaler = IDScaler()
     total_collected_target_data = list(zip(targets_pl, targets_ec))
-    scaled_target_data = target_scaler.fit_transform(total_collected_target_data)
+    #global range, world knowledge (these ranges can be tighter and changed domain by domain)
+    target_scaler.fit([[0, 13.5], [50, 15.5]]) 
+    scaled_target_data = target_scaler.transform(total_collected_target_data)
     compnent_num, classifier = find_component_num(scaled_target_data)
     for i in range(compnent_num):
         classifiers.append([classifier.means_[i], classifier.covariances_[i]])
@@ -72,9 +102,12 @@ def offline_processing_mape_with_ml2asr(data_order, stream_addr, initial_trainin
         data_gathering_for_offline_processing(data_order, stream_addr, initial_training_cycle_num=initial_training_cycle_num)
 
     classifiers = []    
-    target_scaler = preprocessing.MinMaxScaler()
+    # target_scaler = preprocessing.MinMaxScaler()
+    target_scaler = IDScaler()
     total_collected_target_data = list(zip(targets_pl, targets_ec))
-    scaled_target_data = target_scaler.fit_transform(total_collected_target_data)
+    #global range, world knowledge (these ranges can be tighter and changed domain by domain)
+    target_scaler.fit([[0, 13.5], [50, 15.5]])
+    scaled_target_data = target_scaler.transform(total_collected_target_data)
     compnent_num, classifier = find_component_num(scaled_target_data)
     for i in range(compnent_num):
         classifiers.append([classifier.means_[i], classifier.covariances_[i]])

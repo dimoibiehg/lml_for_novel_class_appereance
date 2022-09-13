@@ -24,13 +24,14 @@ class MAPE():
         self.targets_pl = []
         # self.targets_la = []
         self.targets_ec = []
-        self.compnent_num = 1
+        self.component_num = 1
         self.scaler = target_scaler
         self.proba_not_a_member_threshold = 0.001 # 3-sigma 
         self.out_of_class_limit_num = 3
         self.best_selected_targets = [] #(pl, la, ec)
         self.verified_count = []
         self.feature_size = 0
+        self.probas = []
     def human_ordering(self, class_type):
         if(class_type == 1):
             return [1]
@@ -41,6 +42,7 @@ class MAPE():
         # self.features.append(features)
         # here, always total verfication times is much less than 10 minutes (around 3 minutes)
         # otherwise the verification time of the selected features should be considered 
+        self.feature_size = len(features)
         targets_pl = targets[TargetType.PACKETLOSS]
         # targets_la = targets[TargetType.LATENCY]
         targets_ec = targets[TargetType.ENERGY_CONSUMPTION]
@@ -48,7 +50,6 @@ class MAPE():
         self.targets_pl.extend(targets_pl)
         # self.targets_la.extend(targets_la)
         self.targets_ec.extend(targets_ec)
-        self.probas = []
         #fail-safe option
         selected_options_idx = 0
         
@@ -130,6 +131,7 @@ class MAPE():
                             best_option_idx = i
                             break
                         else:
+                            # print(probas[i])
                             out_of_class_limit_counter += 1
                             
             if(best_option_idx > -1):

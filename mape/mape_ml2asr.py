@@ -31,7 +31,7 @@ class MAPE_ML2ASR():
         self.targets_pl = []
         self.targets_la = []
         self.targets_ec = []
-        self.compnent_num = 1
+        self.component_num = 1
         self.target_scaler = target_scaler
         self.feature_scaler = feature_scaler
         self.proba_not_a_member_threshold = 0.001 # 3-sigma 
