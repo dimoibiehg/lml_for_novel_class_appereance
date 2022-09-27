@@ -13,7 +13,26 @@ from mape.mape_ml2asr import MAPE_ML2ASR
 from visualizer.visualizer import plot_distributions
 from sklearn import cluster, mixture, metrics, preprocessing
 from lifelong_self_adaptation.lifelong_self_adaptation import LifelongSelfAdaptation
+from ideal_self_adaptation.ideal_self_adaptation import IdealSelfAdaptation
 import sys
+
+def ideal_classifcation(targets_pl, targets_ec):
+    max_classifier_idx = -1
+    max_prob = -1
+    classifiers = retrieve_from_pickle('./files/ideal_classifiers.pkl')
+    
+    for j in range(len(classifiers)):
+        x = [targets_pl, targets_ec]
+        m_dist_x = np.dot((x-classifiers[j][0]).transpose(), np.linalg.inv(classifiers[j][1]))
+        m_dist_x = np.dot(m_dist_x, (x-classifiers[j][0]))
+        proba = 1-stats.chi2.cdf(m_dist_x, 3)
+        # if(proba < self.proba_not_a_member_threshold):
+        #     pass
+        # else:
+        if(proba > max_prob):
+            max_classifier_idx = j
+            max_prob = proba
+    return max_classifier_idx, max_prob
 
 stream_addr = "./data"
 p1 = list(range(1,151))
@@ -21,6 +40,14 @@ p2 = list(range(151, 250))
 p3 = list(range(251, 351))
 data_order = p1 + p2 + p3
 data_ranges = [[p1[0], p1[-1]], [p2[0], p2[-1]], [p3[0], p3[-1]]]
+
+stream = fetch_stream(len(data_order), data_order =  data_order, stream_addr = stream_addr)
+target_scaler, classifiers = offline_processing_simple_mape(data_order, stream_addr)
+mape = MAPE(stream, classifiers, target_scaler)
+ideal_mape = IdealSelfAdaptation(mape)
+ideal_mape.start()
+
+sys.exit()
 
 stream = fetch_stream(len(data_order), data_order =  data_order, stream_addr = stream_addr)
 target_scaler, classifiers = offline_processing_simple_mape(data_order, stream_addr)
@@ -36,6 +63,8 @@ target_scaler, classifiers = offline_processing_simple_mape(data_order, stream_a
 mape1 = MAPE(stream, classifiers, target_scaler)
 for i in tqdm(range(348)):
     mape1.monitor_and_analyse()
+    
+ideal_classifiers = retrieve_from_pickle('./files/ideal_classifiers.pkl')
 
 # names = ["ًReference", "ML2ASR"]
 # colors = ["#E15F99", "lightseagreen", "rgb(127, 60, 141)"]#, "rgb(175, 100, 88)"]
@@ -67,6 +96,8 @@ for i in tqdm(range(348)):
 # mape2 = MAPE_ML2ASR(stream)
 # for i in tqdm(range(348)):
 #     mape2.monitor_and_analyse()
+
+
 
 
 # print(len(mape.best_selected_targets))
