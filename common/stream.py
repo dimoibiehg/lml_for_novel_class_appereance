@@ -2,6 +2,7 @@ from typing import overload
 from os import path
 import json
 from common.goal import *
+
 class Stream:
 
     def __init__(self, stream_len, target_types = [TargetType.LATENCY, TargetType.PACKETLOSS, TargetType.ENERGY_CONSUMPTION],

@@ -28,7 +28,7 @@ class MAPE():
         self.scaler = target_scaler
         self.proba_not_a_member_threshold = 0.001 # 3-sigma 
         self.out_of_class_limit_num = 3
-        self.best_selected_targets = [] #(pl, la, ec)
+        self.best_selected_targets = [] #(pl,ec)
         self.verified_count = []
         self.feature_size = 0
         self.probas = []
